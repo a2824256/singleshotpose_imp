@@ -6,7 +6,7 @@ from torchvision import datasets, transforms
 import scipy.io
 import warnings
 
-# warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")
 import matplotlib.pyplot as plt
 import scipy.misc
 
@@ -25,6 +25,7 @@ def makedirs(path):
 # %%
 
 def valid(datacfg, modelcfg, weightfile):
+    # 内部函数
     def truths_length(truths, max_num_gt=50):
         for i in range(max_num_gt):
             if truths[i][1] == 0:
@@ -32,30 +33,44 @@ def valid(datacfg, modelcfg, weightfile):
 
     # Parse configuration files
     data_options = read_data_cfg(datacfg)
-    print(datacfg)
+    # 验证集文件路径
     valid_images = data_options['valid']
+    # 网格数据
     meshname = data_options['mesh']
+    # 备份权重文件夹
     backupdir = data_options['backup']
+    # 类别名称
     name = data_options['name']
+    # 选择使用哪个GPU
     gpus = data_options['gpus']
+    # 相机参数
     fx = float(data_options['fx'])
     fy = float(data_options['fy'])
     u0 = float(data_options['u0'])
     v0 = float(data_options['v0'])
+    # 图像尺寸
     im_width = int(data_options['width'])
     im_height = int(data_options['height'])
+    # 判断备份文件夹是否存在
     if not os.path.exists(backupdir):
         makedirs(backupdir)
 
     # Parameters
     seed = int(time.time())
     os.environ['CUDA_VISIBLE_DEVICES'] = gpus
+    # 随机种子
     torch.cuda.manual_seed(seed)
+    # 是否保存运行结果
     save = False
+    # 是否可视化显示
     visualize = True
+    # 是否显示测试耗时
     testtime = True
+    # 类别数量
     num_classes = 1
+    # 测试样本
     testing_samples = 0.0
+    # 边角
     edges_corners = [[0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3], [2, 6], [3, 7], [4, 5], [4, 6], [5, 7], [6, 7]]
     if save:
         makedirs(backupdir + '/test')
@@ -77,10 +92,13 @@ def valid(datacfg, modelcfg, weightfile):
     gts_rot = []
     gts_corners2D = []
 
-    # Read object model information, get 3D bounding box corners
+    # 读取模型信息，获得3D BBox 框角点
     mesh = MeshPly(meshname)
+    # 获取模型信息
     vertices = np.c_[np.array(mesh.vertices), np.ones((len(mesh.vertices), 1))].transpose()
+    # 获得角点
     corners3D = get_3D_corners(vertices)
+    # 计算直径
     try:
         diam = float(data_options['diam'])
     except:
@@ -90,37 +108,46 @@ def valid(datacfg, modelcfg, weightfile):
     intrinsic_calibration = get_camera_intrinsic(u0, v0, fx, fy)
 
     # Get validation file names
+    # 批量读入验证集文件
     with open(valid_images) as fp:
         tmp_files = fp.readlines()
         valid_files = [item.rstrip() for item in tmp_files]
 
     # Specicy model, load pretrained weights, pass to GPU and set the module in evaluation mode
+    # 初始化网络
     model = Darknet(modelcfg)
+    # 打印网络结构
     model.print_network()
+    # 载入权重
     model.load_weights(weightfile)
+    # 使用cuda加速
     model.cuda()
     model.eval()
+    # 样本大小
     test_width = model.test_width
     test_height = model.test_height
     num_keypoints = model.num_keypoints
+    # label数量 = 关键点x3 + 3
     num_labels = num_keypoints * 2 + 3
 
     # Get the parser for the test dataset
-    # TODO 验证集是否保留？
+    # 验证集，shape为尺寸，shuffle为是否随机打散数据集顺讯，transform为预处理将图片转为Tensor数据
     valid_dataset = dataset.listDataset(valid_images,
                                         shape=(test_width, test_height),
                                         shuffle=False,
                                         transform=transforms.Compose([transforms.ToTensor(), ]))
 
     # Specify the number of workers for multiple processing, get the dataloader for the test dataset
+    # 使用4线程来处理
     kwargs = {'num_workers': 4, 'pin_memory': True}
-    # TODO 去除DataLoader
-    test_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, shuffle=False, **kwargs)
 
+    # 测试集
+    test_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, shuffle=False, **kwargs)
     logging("   Testing {}...".format(name))
     logging("   Number of test samples: %d" % len(test_loader.dataset))
     # Iterate through test batches (Batch size for test data is 1)
     count = 0
+    #迭代测试集
     for batch_idx, (data, target) in enumerate(test_loader):
 
         # Images
@@ -199,7 +226,7 @@ def valid(datacfg, modelcfg, weightfile):
                 norm = np.linalg.norm(proj_2d_gt - proj_2d_pred, axis=0)
                 pixel_dist = np.mean(norm)
                 errs_2d.append(pixel_dist)
-
+                # 可视化代码
                 if visualize:
                     # Visualize
                     plt.xlim((0, im_width))
@@ -244,7 +271,6 @@ def valid(datacfg, modelcfg, weightfile):
                                np.array(corners2D_gt, dtype='float32'))
                     np.savetxt(backupdir + '/test/pr/corners_' + valid_files[count][-8:-3] + 'txt',
                                np.array(corners2D_pr, dtype='float32'))
-
         t5 = time.time()
 
     # Compute 2D projection error, 6D pose error, 5cm5degree error
@@ -286,9 +312,11 @@ def valid(datacfg, modelcfg, weightfile):
                          {'R_gts': gts_rot, 't_gts': gts_trans, 'corner_gts': gts_corners2D, 'R_prs': preds_rot,
                           't_prs': preds_trans, 'corner_prs': preds_corners2D})
 
-
+# 数据配置文件
 datacfg = 'cfg/ape.data'
+# cfg文件配置网络结构
 modelcfg = 'cfg/yolo-pose.cfg'
+# 权重备份
 weightfile = 'backup/ape/model_backup.weights'
 valid(datacfg, modelcfg, weightfile)
 
