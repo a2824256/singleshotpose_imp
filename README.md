@@ -1,4 +1,13 @@
-# singleshotpose
+# singleshotpose - upgraded experimental version
+### 原项目信息
+#### Real-Time Seamless Single Shot 6D Object Pose Prediction<br>
+paper: https://arxiv.org/abs/1711.08848<br>
+code repository: https://github.com/microsoft/singleshotpose
+
+### Iterations、Epoch、Batch、Batch Size之间的关系
+Epoch: 所有的数据送入网络中完成一次前向计算及反向传播的过程。
+Batch: 通常训练的数据量都会挺大，为了减少设备内存负荷，通常都会把数据集切分，一份就是一个batch。
+Iterations: 完成一次epoch所需的batch个数。
 
 ### 更新记录
 #### 2020/02/14
