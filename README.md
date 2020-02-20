@@ -13,7 +13,7 @@ Iterations: 完成一次epoch所需的batch个数。
 #### 2020/02/14
 1. 修改过的singleshotpose源码支持在最新版的pytorch上运行
 ##### 修改记录
-utils.py 242:
+utils.py 242: 
 ```python
 # Softmax语法更新
 cls_confs = torch.nn.Softmax(dim=1)(Variable(output[2*num_keypoints+1:2*num_keypoints+1+num_classes].transpose(0,1))).data
