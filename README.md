@@ -5,6 +5,7 @@ paper: https://arxiv.org/abs/1711.08848 <br>
 code repository: https://github.com/microsoft/singleshotpose
 
 ### 使用方法
+查看文件:https://github.com/a2824256/singleshotpose_imp/blob/master/singleGraphEstimate.py <br>
 新的运行函数
 ```python
 # 数据配置文件
