@@ -24,7 +24,7 @@ valid(datacfg, modelcfg, weightfile, picfile, labelfile)
 ### Iterations、Epoch、Batch、Batch Size之间的关系
 Epoch: 所有的数据送入网络中完成一次前向计算及反向传播的过程。<br>
 Batch: 通常训练的数据量都会挺大，为了减少设备内存负荷，通常都会把数据集切分，一份就是一个batch。<br>
-Batch size: 训练样本个数
+Batch size: 训练样本个数 <br>
 Iterations: 完成一次epoch所需的batch个数。
 
 ### 更新记录
