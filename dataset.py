@@ -114,6 +114,7 @@ class listDataset(Dataset):
     
             # Read the validation labels, allow upto 50 ground-truth objects in an image
             labpath = imgpath.replace('images', 'labels').replace('JPEGImages', 'labels').replace('.jpg', '.txt').replace('.png','.txt')
+            print(labpath)
             num_labels = 2*self.num_keypoints+3 # +2 for ground-truth of width/height , +1 for class label
             label = torch.zeros(self.max_num_gt*num_labels)
             if os.path.getsize(labpath):
@@ -125,6 +126,7 @@ class listDataset(Dataset):
                     label = tmp[0:self.max_num_gt*num_labels]
                 elif tsz > 0:
                     label[0:tsz] = tmp
+                print(label)
 
         # Tranform the image data to PyTorch tensors
         if self.transform is not None:

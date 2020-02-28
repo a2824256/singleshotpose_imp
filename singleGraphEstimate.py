@@ -3,8 +3,11 @@ import time
 import torch
 from torch.autograd import Variable
 from torchvision import datasets, transforms
+from torch.utils.data import Dataset, DataLoader
 import scipy.io
 import warnings
+from PIL import Image
+import trimesh
 
 warnings.filterwarnings("ignore")
 import matplotlib.pyplot as plt
@@ -24,7 +27,7 @@ def makedirs(path):
 
 # %%
 
-def valid(datacfg, modelcfg, weightfile):
+def valid(datacfg, modelcfg, weightfile, picfile, labelfile):
     # 内部函数
     def truths_length(truths, max_num_gt=50):
         for i in range(max_num_gt):
@@ -111,13 +114,14 @@ def valid(datacfg, modelcfg, weightfile):
     # 批量读入验证集文件
     with open(valid_images) as fp:
         tmp_files = fp.readlines()
+        # 删除末端字符，默认不填为空格
         valid_files = [item.rstrip() for item in tmp_files]
 
     # Specicy model, load pretrained weights, pass to GPU and set the module in evaluation mode
     # 初始化网络
     model = Darknet(modelcfg)
     # 打印网络结构
-    model.print_network()
+    # model.print_network()
     # 载入权重
     model.load_weights(weightfile)
     # 使用cuda加速
@@ -127,151 +131,175 @@ def valid(datacfg, modelcfg, weightfile):
     test_width = model.test_width
     test_height = model.test_height
     num_keypoints = model.num_keypoints
+    print("num_keypoints")
+    print(num_keypoints)
     # label数量 = 关键点x3 + 3
     num_labels = num_keypoints * 2 + 3
-
+    print("num_labels")
+    print(num_labels)
     # Get the parser for the test dataset
-    # 验证集，shape为尺寸，shuffle为是否随机打散数据集顺讯，transform为预处理将图片转为Tensor数据
-    valid_dataset = dataset.listDataset(valid_images,
-                                        shape=(test_width, test_height),
-                                        shuffle=False,
-                                        transform=transforms.Compose([transforms.ToTensor(), ]))
-
-    # Specify the number of workers for multiple processing, get the dataloader for the test dataset
-    # 使用4线程来处理
-    kwargs = {'num_workers': 4, 'pin_memory': True}
-
-    # 测试集
-    test_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, shuffle=False, **kwargs)
-    logging("   Testing {}...".format(name))
-    logging("   Number of test samples: %d" % len(test_loader.dataset))
+    # 验证集，shape为尺寸，shuffle为是否随机打散数据集顺序，transform为预处理将图片转为Tensor数据
+    # valid_dataset = dataset.listDataset(valid_images,
+    #                                     shape=(test_width, test_height),
+    #                                     shuffle=False,
+    #                                     transform=transforms.Compose([transforms.ToTensor(), ]))
+    # test_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, shuffle=False)
+    # logging("   Testing {}...".format(name))
+    # logging("   Number of test samples: %d" % len(test_loader.dataset))
     # Iterate through test batches (Batch size for test data is 1)
     count = 0
+
+    # 图片预处理代码
+    transform = transforms.Compose([transforms.ToTensor(), ])
+    pic_obj = Image.open(picfile).convert('RGB')
+    pic_obj = pic_obj.resize((test_width, test_height))
+    pic_tensor = transform(pic_obj)
+    # 张量增加一维对齐原算法数据结构
+    pic_tensor = pic_tensor[np.newaxis,:]
+
+    # label预处理
+    # 来自原算法默认设置
+    # num_keypoints = 9
+    # 来自原算法默认设置
+    max_num_gt = 50
+    # 来自原算法默认设置
+    # num_labels = 2 * num_keypoints + 3  # +2 for ground-truth of width/height , +1 for class label
+    label = torch.zeros(max_num_gt * num_labels)
+    tmp = torch.from_numpy(read_truths_args(labelfile))
+    tmp = tmp.view(-1)
+    tsz = tmp.numel()
+    if tsz > max_num_gt * num_labels:
+        label = tmp[0:max_num_gt * num_labels]
+    elif tsz > 0:
+        label[0:tsz] = tmp
+
     #迭代测试集
-    for batch_idx, (data, target) in enumerate(test_loader):
+    # for batch_idx, (data, target) in enumerate(test_loader):
+    target = label
+    data = pic_tensor
+    # Images
+    img = data[0, :, :, :]
+    img = img.numpy().squeeze()
+    img = np.transpose(img, (1, 2, 0))
 
-        # Images
-        img = data[0, :, :, :]
-        img = img.numpy().squeeze()
-        img = np.transpose(img, (1, 2, 0))
+    t1 = time.time()
+    # Pass data to GPU
+    data = data.cuda()
+    target = target.cuda()
+    # Wrap tensors in Variable class, set volatile=True for inference mode and to use minimal memory during inference
+    with torch.no_grad():
+        data = Variable(data)
+    t2 = time.time()
+    # Forward pass
+    output = model(data).data
+    t3 = time.time()
+    # Using confidence threshold, eliminate low-confidence predictions
+    all_boxes = get_region_boxes(output, num_classes, num_keypoints)
+    t4 = time.time()
+    # Evaluation
+    # TODO 迭代标框操作
+    # Iterate through all batch elements
+    for box_pr, target in zip([all_boxes], [target]):
+        # For each image, get all the targets (for multiple object pose estimation, there might be more than 1 target per image)
+        truths = target.view(-1, num_keypoints * 2 + 3)
+        # Get how many objects are present in the scene
+        num_gts = truths_length(truths)
+        # Iterate through each ground-truth object
+        for k in range(num_gts):
+            box_gt = list()
+            for j in range(1, 2 * num_keypoints + 1):
+                box_gt.append(truths[k][j])
+            box_gt.extend([1.0, 1.0])
+            box_gt.append(truths[k][0])
 
-        t1 = time.time()
-        # Pass data to GPU
-        data = data.cuda()
-        target = target.cuda()
-        # Wrap tensors in Variable class, set volatile=True for inference mode and to use minimal memory during inference
-        with torch.no_grad():
-            data = Variable(data)
-        t2 = time.time()
-        # Forward pass
-        output = model(data).data
-        t3 = time.time()
-        # Using confidence threshold, eliminate low-confidence predictions
-        all_boxes = get_region_boxes(output, num_classes, num_keypoints)
-        t4 = time.time()
-        # Evaluation
-        # TODO 迭代标框操作
-        # Iterate through all batch elements
-        for box_pr, target in zip([all_boxes], [target[0]]):
-            # For each image, get all the targets (for multiple object pose estimation, there might be more than 1 target per image)
-            truths = target.view(-1, num_keypoints * 2 + 3)
-            # Get how many objects are present in the scene
-            num_gts = truths_length(truths)
-            # Iterate through each ground-truth object
-            for k in range(num_gts):
-                box_gt = list()
-                for j in range(1, 2 * num_keypoints + 1):
-                    box_gt.append(truths[k][j])
-                box_gt.extend([1.0, 1.0])
-                box_gt.append(truths[k][0])
+            # Denormalize the corner predictions
+            # 获取2D groundtruth
+            corners2D_gt = np.array(np.reshape(box_gt[:18], [9, 2]), dtype='float32')
+            corners2D_pr = np.array(np.reshape(box_pr[:18], [9, 2]), dtype='float32')
+            corners2D_gt[:, 0] = corners2D_gt[:, 0] * im_width
+            corners2D_gt[:, 1] = corners2D_gt[:, 1] * im_height
+            corners2D_pr[:, 0] = corners2D_pr[:, 0] * im_width
+            corners2D_pr[:, 1] = corners2D_pr[:, 1] * im_height
+            preds_corners2D.append(corners2D_pr)
+            gts_corners2D.append(corners2D_gt)
 
-                # Denormalize the corner predictions
-                corners2D_gt = np.array(np.reshape(box_gt[:18], [9, 2]), dtype='float32')
-                corners2D_pr = np.array(np.reshape(box_pr[:18], [9, 2]), dtype='float32')
-                corners2D_gt[:, 0] = corners2D_gt[:, 0] * im_width
-                corners2D_gt[:, 1] = corners2D_gt[:, 1] * im_height
-                corners2D_pr[:, 0] = corners2D_pr[:, 0] * im_width
-                corners2D_pr[:, 1] = corners2D_pr[:, 1] * im_height
-                preds_corners2D.append(corners2D_pr)
-                gts_corners2D.append(corners2D_gt)
+            # Compute corner prediction error
+            corner_norm = np.linalg.norm(corners2D_gt - corners2D_pr, axis=1)
+            corner_dist = np.mean(corner_norm)
+            errs_corner2D.append(corner_dist)
 
-                # Compute corner prediction error
-                corner_norm = np.linalg.norm(corners2D_gt - corners2D_pr, axis=1)
-                corner_dist = np.mean(corner_norm)
-                errs_corner2D.append(corner_dist)
+            # Compute [R|t] by pnp
+            R_gt, t_gt = pnp(np.array(np.transpose(np.concatenate((np.zeros((3, 1)), corners3D[:3, :]), axis=1)),
+                                      dtype='float32'), corners2D_gt,
+                             np.array(intrinsic_calibration, dtype='float32'))
+            R_pr, t_pr = pnp(np.array(np.transpose(np.concatenate((np.zeros((3, 1)), corners3D[:3, :]), axis=1)),
+                                      dtype='float32'), corners2D_pr,
+                             np.array(intrinsic_calibration, dtype='float32'))
 
-                # Compute [R|t] by pnp
-                R_gt, t_gt = pnp(np.array(np.transpose(np.concatenate((np.zeros((3, 1)), corners3D[:3, :]), axis=1)),
-                                          dtype='float32'), corners2D_gt,
-                                 np.array(intrinsic_calibration, dtype='float32'))
-                R_pr, t_pr = pnp(np.array(np.transpose(np.concatenate((np.zeros((3, 1)), corners3D[:3, :]), axis=1)),
-                                          dtype='float32'), corners2D_pr,
-                                 np.array(intrinsic_calibration, dtype='float32'))
+            # Compute translation error
+            trans_dist = np.sqrt(np.sum(np.square(t_gt - t_pr)))
+            errs_trans.append(trans_dist)
 
-                # Compute translation error
-                trans_dist = np.sqrt(np.sum(np.square(t_gt - t_pr)))
-                errs_trans.append(trans_dist)
+            # Compute angle error
+            angle_dist = calcAngularDistance(R_gt, R_pr)
+            errs_angle.append(angle_dist)
 
-                # Compute angle error
-                angle_dist = calcAngularDistance(R_gt, R_pr)
-                errs_angle.append(angle_dist)
+            # Compute pixel error
+            Rt_gt = np.concatenate((R_gt, t_gt), axis=1)
+            Rt_pr = np.concatenate((R_pr, t_pr), axis=1)
+            proj_2d_gt = compute_projection(vertices, Rt_gt, intrinsic_calibration)
+            proj_2d_pred = compute_projection(vertices, Rt_pr, intrinsic_calibration)
+            proj_corners_gt = np.transpose(compute_projection(corners3D, Rt_gt, intrinsic_calibration))
+            proj_corners_pr = np.transpose(compute_projection(corners3D, Rt_pr, intrinsic_calibration))
+            norm = np.linalg.norm(proj_2d_gt - proj_2d_pred, axis=0)
+            pixel_dist = np.mean(norm)
+            errs_2d.append(pixel_dist)
+            # 可视化代码
+            if visualize:
+                # Visualize
+                plt.xlim((0, im_width))
+                plt.ylim((0, im_height))
+                plt.imshow(scipy.misc.imresize(img, (im_height, im_width)))
+                # Projections
+                for edge in edges_corners:
+                    plt.plot(proj_corners_gt[edge, 0], proj_corners_gt[edge, 1], color='g', linewidth=3.0)
+                    plt.plot(proj_corners_pr[edge, 0], proj_corners_pr[edge, 1], color='b', linewidth=3.0)
+                plt.gca().invert_yaxis()
+                plt.show()
 
-                # Compute pixel error
-                Rt_gt = np.concatenate((R_gt, t_gt), axis=1)
-                Rt_pr = np.concatenate((R_pr, t_pr), axis=1)
-                proj_2d_gt = compute_projection(vertices, Rt_gt, intrinsic_calibration)
-                proj_2d_pred = compute_projection(vertices, Rt_pr, intrinsic_calibration)
-                proj_corners_gt = np.transpose(compute_projection(corners3D, Rt_gt, intrinsic_calibration))
-                proj_corners_pr = np.transpose(compute_projection(corners3D, Rt_pr, intrinsic_calibration))
-                norm = np.linalg.norm(proj_2d_gt - proj_2d_pred, axis=0)
-                pixel_dist = np.mean(norm)
-                errs_2d.append(pixel_dist)
-                # 可视化代码
-                if visualize:
-                    # Visualize
-                    plt.xlim((0, im_width))
-                    plt.ylim((0, im_height))
-                    plt.imshow(scipy.misc.imresize(img, (im_height, im_width)))
-                    # Projections
-                    for edge in edges_corners:
-                        plt.plot(proj_corners_gt[edge, 0], proj_corners_gt[edge, 1], color='g', linewidth=3.0)
-                        plt.plot(proj_corners_pr[edge, 0], proj_corners_pr[edge, 1], color='b', linewidth=3.0)
-                    plt.gca().invert_yaxis()
-                    plt.show()
+            # Compute 3D distances
+            transform_3d_gt = compute_transformation(vertices, Rt_gt)
+            transform_3d_pred = compute_transformation(vertices, Rt_pr)
+            norm3d = np.linalg.norm(transform_3d_gt - transform_3d_pred, axis=0)
+            vertex_dist = np.mean(norm3d)
+            errs_3d.append(vertex_dist)
 
-                # Compute 3D distances
-                transform_3d_gt = compute_transformation(vertices, Rt_gt)
-                transform_3d_pred = compute_transformation(vertices, Rt_pr)
-                norm3d = np.linalg.norm(transform_3d_gt - transform_3d_pred, axis=0)
-                vertex_dist = np.mean(norm3d)
-                errs_3d.append(vertex_dist)
+            # Sum errors
+            testing_error_trans += trans_dist
+            testing_error_angle += angle_dist
+            testing_error_pixel += pixel_dist
+            testing_samples += 1
+            count = count + 1
 
-                # Sum errors
-                testing_error_trans += trans_dist
-                testing_error_angle += angle_dist
-                testing_error_pixel += pixel_dist
-                testing_samples += 1
-                count = count + 1
+            if save:
+                preds_trans.append(t_pr)
+                gts_trans.append(t_gt)
+                preds_rot.append(R_pr)
+                gts_rot.append(R_gt)
 
-                if save:
-                    preds_trans.append(t_pr)
-                    gts_trans.append(t_gt)
-                    preds_rot.append(R_pr)
-                    gts_rot.append(R_gt)
-
-                    np.savetxt(backupdir + '/test/gt/R_' + valid_files[count][-8:-3] + 'txt',
-                               np.array(R_gt, dtype='float32'))
-                    np.savetxt(backupdir + '/test/gt/t_' + valid_files[count][-8:-3] + 'txt',
-                               np.array(t_gt, dtype='float32'))
-                    np.savetxt(backupdir + '/test/pr/R_' + valid_files[count][-8:-3] + 'txt',
-                               np.array(R_pr, dtype='float32'))
-                    np.savetxt(backupdir + '/test/pr/t_' + valid_files[count][-8:-3] + 'txt',
-                               np.array(t_pr, dtype='float32'))
-                    np.savetxt(backupdir + '/test/gt/corners_' + valid_files[count][-8:-3] + 'txt',
-                               np.array(corners2D_gt, dtype='float32'))
-                    np.savetxt(backupdir + '/test/pr/corners_' + valid_files[count][-8:-3] + 'txt',
-                               np.array(corners2D_pr, dtype='float32'))
-        t5 = time.time()
+                np.savetxt(backupdir + '/test/gt/R_' + valid_files[count][-8:-3] + 'txt',
+                           np.array(R_gt, dtype='float32'))
+                np.savetxt(backupdir + '/test/gt/t_' + valid_files[count][-8:-3] + 'txt',
+                           np.array(t_gt, dtype='float32'))
+                np.savetxt(backupdir + '/test/pr/R_' + valid_files[count][-8:-3] + 'txt',
+                           np.array(R_pr, dtype='float32'))
+                np.savetxt(backupdir + '/test/pr/t_' + valid_files[count][-8:-3] + 'txt',
+                           np.array(t_pr, dtype='float32'))
+                np.savetxt(backupdir + '/test/gt/corners_' + valid_files[count][-8:-3] + 'txt',
+                           np.array(corners2D_gt, dtype='float32'))
+                np.savetxt(backupdir + '/test/pr/corners_' + valid_files[count][-8:-3] + 'txt',
+                           np.array(corners2D_pr, dtype='float32'))
+    t5 = time.time()
 
     # Compute 2D projection error, 6D pose error, 5cm5degree error
     px_threshold = 5  # 5 pixel threshold for 2D reprojection error is standard in recent sota 6D object pose estimation works
@@ -318,6 +346,8 @@ datacfg = 'cfg/ape.data'
 modelcfg = 'cfg/yolo-pose.cfg'
 # 权重备份
 weightfile = 'backup/ape/model_backup.weights'
-valid(datacfg, modelcfg, weightfile)
+picfile = 'LINEMOD/ape/JPEGImages/000010.jpg'
+labelfile = 'LINEMOD/ape/labels/000010.txt'
+valid(datacfg, modelcfg, weightfile, picfile, labelfile)
 
 
