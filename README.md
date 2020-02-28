@@ -60,5 +60,5 @@ conda install scipy=1.2.1
 1. 完成单图检测，使用方法查看使用教程
 
 ### Valid
-验证集与测试机的比对与运行结果<br>
+验证集与测试集的比对与运行结果<br>
 ![valid.ipynb](./material/img/result.png)
