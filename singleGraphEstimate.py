@@ -140,7 +140,7 @@ def valid(datacfg, modelcfg, weightfile, picfile, labelfile):
     pic_obj = Image.open(picfile).convert('RGB')
     pic_obj = pic_obj.resize((test_width, test_height))
     pic_tensor = transform(pic_obj)
-    # 张量增加一维对齐原算法数据结构
+    # 张量增加一维对齐原算法tensor维度
     pic_tensor = pic_tensor[np.newaxis,:]
 
     # label预处理
