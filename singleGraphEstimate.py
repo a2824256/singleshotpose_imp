@@ -131,24 +131,10 @@ def valid(datacfg, modelcfg, weightfile, picfile, labelfile):
     test_width = model.test_width
     test_height = model.test_height
     num_keypoints = model.num_keypoints
-    print("num_keypoints")
-    print(num_keypoints)
     # label数量 = 关键点x3 + 3
     num_labels = num_keypoints * 2 + 3
-    print("num_labels")
-    print(num_labels)
-    # Get the parser for the test dataset
-    # 验证集，shape为尺寸，shuffle为是否随机打散数据集顺序，transform为预处理将图片转为Tensor数据
-    # valid_dataset = dataset.listDataset(valid_images,
-    #                                     shape=(test_width, test_height),
-    #                                     shuffle=False,
-    #                                     transform=transforms.Compose([transforms.ToTensor(), ]))
-    # test_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=1, shuffle=False)
-    # logging("   Testing {}...".format(name))
-    # logging("   Number of test samples: %d" % len(test_loader.dataset))
-    # Iterate through test batches (Batch size for test data is 1)
     count = 0
-
+    # -----------------------单图start-------------------------------
     # 图片预处理代码
     transform = transforms.Compose([transforms.ToTensor(), ])
     pic_obj = Image.open(picfile).convert('RGB')
@@ -172,9 +158,7 @@ def valid(datacfg, modelcfg, weightfile, picfile, labelfile):
         label = tmp[0:max_num_gt * num_labels]
     elif tsz > 0:
         label[0:tsz] = tmp
-
-    #迭代测试集
-    # for batch_idx, (data, target) in enumerate(test_loader):
+    # -------------------------单图end-----------------------------
     target = label
     data = pic_tensor
     # Images
