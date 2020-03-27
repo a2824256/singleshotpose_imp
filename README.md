@@ -4,7 +4,7 @@
 paper: https://arxiv.org/abs/1711.08848 <br>
 code repository: https://github.com/microsoft/singleshotpose
 
-### 使用方法
+### 单图检测使用方法
 查看文件:https://github.com/a2824256/singleshotpose_imp/blob/master/singleGraphEstimate.py <br>
 新的运行函数
 ```python
@@ -27,9 +27,13 @@ Batch: 通常训练的数据量都会挺大，为了减少设备内存负荷，�
 Batch size: 训练样本个数 <br>
 Iterations: 完成一次epoch所需的batch个数。
 
+### TODO List
+1. 获取点云的8个角标代替原算法获取网格8个角标的方式
+
 ### 更新记录
 #### 2020/02/14
 1. 修改过的singleshotpose源码支持在最新版的pytorch上运行
+
 ##### 修改记录
 utils.py 242: 
 ```python
@@ -59,6 +63,12 @@ conda install scipy=1.2.1
 #### 2020/02/21
 1. 完成单图检测，使用方法查看使用教程
 
+#### 2020/03/27
+1. 更新获取3d点云8个角点的方法，文件为根目录的pointCloudDisp.py
+
 ### Valid
 验证集与测试集的比对与运行结果<br>
 ![valid.ipynb](./material/img/result.png)
+
+### 获取点云8个角点
+![pointcloud](./material/img/pointcloud.png)
