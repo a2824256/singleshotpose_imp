@@ -27,6 +27,13 @@ valid(datacfg, modelcfg, weightfile, picfile, labelfile)
 # 0-2:vertices 3-5:normals 6-8:colors
 -0.02522185 0.03090663 0.5529081 2.590789 3.252072 4.526592 75 72 54 255 
 ```
+### 修改后的点云八角绘制线段顺序
+```
+edges_corners = [[1, 5], [2, 6], [3, 7], [4, 8],
+                     [1, 2], [1, 3], [2, 4], [3, 4],
+                     [5, 6], [5, 7], [6, 8], [7, 8]]
+```
+
 
 ### Iterations、Epoch、Batch、Batch Size之间的关系
 Epoch: 所有的数据送入网络中完成一次前向计算及反向传播的过程。<br>
