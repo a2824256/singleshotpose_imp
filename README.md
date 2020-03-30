@@ -21,6 +21,13 @@ labelfile = 'LINEMOD/ape/labels/000010.txt'
 valid(datacfg, modelcfg, weightfile, picfile, labelfile)
 ```
 
+### .ply点云-散点数据格式
+索引:数据类型
+```
+# 0-2:vertices 3-5:normals 6-8:colors
+-0.02522185 0.03090663 0.5529081 2.590789 3.252072 4.526592 75 72 54 255 
+```
+
 ### Iterations、Epoch、Batch、Batch Size之间的关系
 Epoch: 所有的数据送入网络中完成一次前向计算及反向传播的过程。<br>
 Batch: 通常训练的数据量都会挺大，为了减少设备内存负荷，通常都会把数据集切分，一份就是一个batch。<br>
