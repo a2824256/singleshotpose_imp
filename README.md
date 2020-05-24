@@ -27,7 +27,6 @@ valid(datacfg, modelcfg, weightfile, picfile, labelfile)
 # 0-2:vertices 3-5:normals 6-8:colors
 -0.02522185 0.03090663 0.5529081 2.590789 3.252072 4.526592 75 72 54 255 
 ```
-```
 
 ### 平移矩阵
 R_gt 为旋转矩阵<br>
