@@ -1,5 +1,5 @@
 # singleshotpose - upgraded experimental version
-$\color{#FF3030}{暂停更新}$
+<font color=red size=5>该仓库暂停更新,自制模型位姿估计异常</font>
 ### 原项目信息
 #### Real-Time Seamless Single Shot 6D Object Pose Prediction
 paper: https://arxiv.org/abs/1711.08848 <br>
