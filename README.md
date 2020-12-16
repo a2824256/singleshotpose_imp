@@ -1,3 +1,4 @@
+## 暂停更新
 # singleshotpose - upgraded experimental version
 ### 原项目信息
 #### Real-Time Seamless Single Shot 6D Object Pose Prediction
