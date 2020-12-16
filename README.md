@@ -1,5 +1,5 @@
-## 暂停更新
 # singleshotpose - upgraded experimental version
+$\color{red}{暂停更新}$
 ### 原项目信息
 #### Real-Time Seamless Single Shot 6D Object Pose Prediction
 paper: https://arxiv.org/abs/1711.08848 <br>
